@@ -1,0 +1,55 @@
+camera_matrix:
+- - 27039.861513138727
+  - 0.0
+  - 960.0
+- - 0.0
+  - 27039.861513138727
+  - 544.0
+- - 0.0
+  - 0.0
+  - 1.0
+distortion_coefficients:
+- - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+image_size:
+- 1920
+- 1088
+rotation:
+- - 0.006576411889236966
+  - 0.001211180369924061
+  - 0.9999776416744399
+- - 0.030130543389560026
+  - 0.9995449792805067
+  - -0.0014088116202058357
+- - -0.9995243374534273
+  - 0.030139134646550436
+  - 0.0065369259628791365
+translation:
+- - 2.2517711176555513
+- - -0.9229248718850148
+- - -77.70931767724616
+val_error_m: 0.012611654515804222
+calibrated_at: '2026-11-01T18:46:08'
+reference_still:
+  session_id: 6903c32a88a5
+  position_id: __empty
+  captured_at: '2026-11-01T17:38:11'
+  board_in_frame: false
+  stumps_in_frame: true
+  file: orig_frame/2.jpg
+solve:
+  method: cylinder_markers
+  focal: locked at motor step
+  distortion: zero
+  principal_point: image centre
+  spots_used:
+  - s1
+  - s2
+  - s3
+  - s4
+  - s5
+  - s6
+  mean_reprojection_px: 2.1760526745857542

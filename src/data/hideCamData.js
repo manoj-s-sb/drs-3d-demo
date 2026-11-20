@@ -1,0 +1,16 @@
+export const hideCamList = [
+  "VideoPlayback",
+  "TrajectoryView",
+  "SensorData",
+  "PreSlot",
+  "SlotEnd",
+  "Default",
+  "SessionPause",
+  "SessionResume",
+  "SessionInit",
+  "BallRelease",
+  "PreRelease",
+  "SessionTestBall",
+  "UserWelcome",
+  "SessionStartInterval",
+];

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StanceBeam DRS 3D</title>
+    <!-- Operator console fonts: Barlow (body/labels/buttons), Barlow Condensed
+         (section titles / logo / big decision buttons), JetBrains Mono (numeric
+         & code — match id, clock, over, delivery code, key hints).
+         SELF-HOSTED in /public/fonts — no Google Fonts / internet dependency. -->
+    <link rel="stylesheet" href="/fonts/google-fonts.css" />
+    <script>
+      // Default landing view = the operator dashboard. On a plain load (no
+      // ?dashboard and not the ?broadcast big-screen window) add ?dashboard=1 to
+      // the URL BEFORE the app bundle reads the query (see src/viewMode.js), so it
+      // opens on the dashboard with no flash and no reload.
+      (function () {
+        var p = new URLSearchParams(location.search);
+        if (!p.has("broadcast") && !p.has("dashboard")) {
+          p.set("dashboard", "1");
+          history.replaceState(
+            null,
+            "",
+            location.pathname + "?" + p.toString() + location.hash,
+          );
+        }
+      })();
+    </script>
+    <script>
+      // Big screen (?broadcast=1): request fullscreen as early as possible so it
+      // catches the transient user activation passed from the operator's
+      // "Broadcast" click (it expires within a few seconds). Running here — before
+      // the React bundle loads — maximizes the chance the browser allows it.
+      (function () {
+        if (!new URLSearchParams(location.search).has("broadcast")) return;
+        var go = function () {
+          var el = document.documentElement;
+          if (el && el.requestFullscreen && !document.fullscreenElement) {
+            el.requestFullscreen().catch(function () {});
+          }
+        };
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", go, { once: true });
+        } else {
+          go();
+        }
+      })();
+    </script>
+  </head>
+  <body style="width: 100%; height: 100%">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

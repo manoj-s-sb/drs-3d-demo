@@ -1,0 +1,25 @@
+export const colorData = {
+  overs: [
+    "#c7522a",
+    "#bc5090",
+    "#d74a49",
+    "#057dcd",
+    "#44aa35",
+    "#ffa600",
+    "#8aaf6f",
+    "#1ba2ac",
+    "#618cc5",
+  ],
+  scorecard: {
+    6: "#00C853",
+    4: "#0277BD",
+    3: "#FFD600",
+    2: "#FFA726",
+    1: "#FF8A65",
+    0: "#C62828",
+    out: "#FFFFFF",
+  },
+  impactLineColor: "#008585",
+  swingAnalysisStraight: "#ff4500",
+  swingAnalysisTurn: "#ff8f66",
+};

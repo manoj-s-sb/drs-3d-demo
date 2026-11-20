@@ -1,0 +1,116 @@
+{
+  "version": 3,
+  "description": "Rule-driven DRS review UI, WICKET-DRIVEN to match LBW_Full_Matrix.xlsx exactly. For each ball the renderer reads the gate values (delivery / pitching / impact / wicket / height), walks the rules top-to-bottom, and applies the FIRST rule whose `when` matches. Edit these rules to change what the review shows — no code, no rebuild. See docs/DRS_Rules_Master_Table.md.",
+
+  "_howMatchingWorks": {
+    "any / omitted": "matches anything",
+    "PRESENT": "matches when the ball's value was evaluated (NOT N/A)",
+    "NA": "matches when the ball's value is N/A (never evaluated)",
+    "[list]": "matches when the ball's value is one of the list",
+    "VALUE": "matches when the ball's value equals it exactly (e.g. OUTSIDE_OFF)"
+  },
+
+  "_layout": "Panels are placed with TWO explicit lists: panelsLeft (left column) and panelsRight (right column). Put a panel name in whichever side you want; use [] for a side with no panels. panelsRight: list order = TOP-to-bottom on screen. panelsLeft: list order = BOTTOM-to-top on screen (the LEFT column builds bottom-up to follow the trajectory — first entry sits lowest, so author it in reveal order: pitching, impact, wickets = pitching at the bottom).",
+
+  "_allowedValues": {
+    "show.trajectory": ["none", "toImpact", "full", "lineOnly"],
+    "show.camera": ["auto", "topPitch", "topDown", "side", "behind", "front"],
+    "panelNames": ["pitching", "impact", "wickets", "height", "originalDecision", "finalDecision", "playerReview"]
+  },
+
+  "rules": [
+    {
+      "id": "fulltoss-would-pitch",
+      "label": "Full toss (3.4.7) — would have pitched; line only, umpire judges height",
+      "when": { "delivery": "fullToss", "height": "PRESENT" },
+      "show": {
+        "trajectory": "lineOnly", "camera": "topDown", "pitchMarker": false, "impactMarker": true,
+        "panelsLeft": ["impact"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "fulltoss-wicket",
+      "label": "Full toss — wicket evaluated → full trajectory (top-down)",
+      "when": { "delivery": "fullToss", "wicket": "PRESENT" },
+      "show": {
+        "trajectory": "full", "camera": "topDown", "pitchMarker": false, "impactMarker": true,
+        "panelsLeft": ["impact", "wickets"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "fulltoss-impact",
+      "label": "Full toss — struck outside line → stop at pad (top-down)",
+      "when": { "delivery": "fullToss", "impact": "PRESENT" },
+      "show": {
+        "trajectory": "toImpact", "camera": "topDown", "pitchMarker": false, "impactMarker": true,
+        "panelsLeft": ["impact"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "fulltoss-fallback",
+      "label": "Full toss — safety fallback",
+      "when": { "delivery": "fullToss" },
+      "show": {
+        "trajectory": "full", "camera": "topDown", "pitchMarker": false, "impactMarker": true,
+        "panelsLeft": ["impact", "wickets"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+
+    {
+      "id": "pitched-outside-leg",
+      "label": "Pitched outside leg — no trajectory; top-down zoom to the bounce",
+      "note": "Gate 1 absolute stop (checked FIRST). No trajectory. Camera moves top-down to the bounce. LEFT: Original Decision + Pitching. RIGHT: Final Decision + Player Review.",
+      "when": { "delivery": "pitched", "pitching": "OUTSIDE_LEG" },
+      "show": {
+        "trajectory": "none", "camera": "topPitch", "pitchMarker": true, "impactMarker": false,
+        "panelsLeft": ["originalDecision", "pitching"],
+        "panelsRight": ["finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "pitched-wicket",
+      "label": "Pitched — wicket evaluated → FULL trajectory to the stumps",
+      "note": "Covers impact In Line, Umpire's Call, AND impact-outside-off with the wicket shown.",
+      "when": { "delivery": "pitched", "wicket": "PRESENT" },
+      "show": {
+        "trajectory": "full", "camera": "auto", "pitchMarker": true, "impactMarker": true,
+        "panelsLeft": ["pitching", "impact", "wickets"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "pitched-impact",
+      "label": "Pitched — struck outside the line, wicket not checked → STOP at pad",
+      "when": { "delivery": "pitched", "impact": "PRESENT" },
+      "show": {
+        "trajectory": "toImpact", "camera": "auto", "pitchMarker": true, "impactMarker": true,
+        "panelsLeft": ["pitching", "impact"],
+        "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+      }
+    },
+    {
+      "id": "pitched-fallback",
+      "label": "Pitched — nothing else matched → pitch only",
+      "when": { "delivery": "pitched" },
+      "show": {
+        "trajectory": "none", "camera": "auto", "pitchMarker": true, "impactMarker": false,
+        "panelsLeft": ["pitching"],
+        "panelsRight": ["originalDecision", "finalDecision"]
+      }
+    }
+  ],
+
+  "default": {
+    "id": "default",
+    "label": "Fallback — show everything",
+    "show": {
+      "trajectory": "full", "camera": "auto", "pitchMarker": true, "impactMarker": true,
+      "panelsLeft": ["pitching", "impact", "wickets"],
+      "panelsRight": ["originalDecision", "finalDecision", "playerReview"]
+    }
+  }
+}

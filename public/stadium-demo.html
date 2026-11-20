@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stadium — Day / Night (dynamic floodlights) demo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+  #ui { position: fixed; top: 14px; left: 14px; z-index: 10; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { font: 600 14px system-ui; padding: 10px 16px; border-radius: 10px; border: 1px solid #ffffff55; color: #fff; background: #0866B2; cursor: pointer; }
+  label { color: #cfe0f5; font-size: 13px; }
+  #status { position: fixed; top: 14px; right: 14px; z-index: 10; color: #fff; font-size: 12px; background: #0009; padding: 8px 12px; border-radius: 8px; max-width: 320px; white-space: pre-line; }
+  #info { position: fixed; bottom: 14px; left: 14px; right: 14px; z-index: 10; color: #cfe0f5; font-size: 13px; line-height: 1.5; background: #0009; padding: 10px 14px; border-radius: 10px; max-width: 820px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="toggle">🌙 Night</button>
+  <label><input id="domeChk" type="checkbox" checked /> dome</label>
+  <label><input id="floodChk" type="checkbox" checked /> floodlights</label>
+  <label><input id="cones" type="checkbox" /> light cones</label>
+  <label>exposure <input id="exp" type="range" min="0.1" max="3" step="0.1" value="1" style="vertical-align:middle" /></label>
+  <label>flood ×<span id="flxv">0.001</span> <input id="flx" type="range" min="-5" max="0" step="0.05" value="-3" style="vertical-align:middle" /></label>
+</div>
+<div id="status">loading…</div>
+<div id="info">
+  Sharjah model set: stadium + dome + wicket + pitch line <b>_2026-10-26</b>, others <b>_2026-10-24</b> (ground · 30-yd circle · white ball · dynamic floodlights).
+  <b>Day ☀️</b> = HDRI sun, floodlights OFF, bright sky.
+  <b>Night 🌙</b> = sky + stands go dark + the night <b>dome</b> shows, and the <b>floodlights from dynamic_light</b> light the field.
+  Drag to orbit · scroll to zoom. Tick <b>light cones</b> to see each floodlight's aim.
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const statusEl = document.getElementById("status");
+const log = (m) => { statusEl.textContent = m; console.log("[demo]", m); };
+
+// ---- renderer / scene / camera ---------------------------------------------
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Match the app's renderer so the demo looks the same: R3F's <Canvas> defaults to ACES
+// Filmic tone mapping + physically-correct lights. Without this, the floodlights'
+// huge physical intensity (~1e7) blows out to pure white and won't match the app.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 5000);
+camera.position.set(0, 45, 100);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 5, 10);
+controls.enableDamping = true;
+
+// HDRI image-based lighting (same file the app uses). Its intensity is turned UP for
+// day and DOWN for night via scene.environmentIntensity.
+const pmrem = new THREE.PMREMGenerator(renderer);
+new RGBELoader().load("/hdri/potsdamer_platz_1k.hdr", (hdr) => {
+  hdr.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = pmrem.fromEquirectangular(hdr).texture;
+  hdr.dispose();
+  applyMode();
+});
+
+// A code sun just for DAY (night uses the floodlights instead).
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(80, 140, 60);
+scene.add(sun);
+
+// ---- loaders ----------------------------------------------------------------
+const ktx2 = new KTX2Loader().setTranscoderPath("/basis/").detectSupport(renderer);
+const draco = new DRACOLoader().setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.6/");
+const gltf = new GLTFLoader().setKTX2Loader(ktx2).setDRACOLoader(draco);
+const load = (url) => new Promise((res, rej) => gltf.load(url, res, undefined, rej));
+
+// Read the WORLD transform of every light node straight from the glb JSON — this does
+// NOT depend on three's node naming (GLTFLoader renames "Spot.001" when the light def
+// shares that name, which made the name-based search find 0 lamps).
+async function readLampTransforms(url) {
+  const buf = await (await fetch(url)).arrayBuffer();
+  const dv = new DataView(buf);
+  const jsonLen = dv.getUint32(12, true);
+  const j = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+  const nodes = j.nodes || [];
+  const parent = {};
+  nodes.forEach((n, i) => (n.children || []).forEach((c) => (parent[c] = i)));
+  const localM = (n) => new THREE.Matrix4().compose(
+    new THREE.Vector3(...(n.translation || [0, 0, 0])),
+    new THREE.Quaternion(...(n.rotation || [0, 0, 0, 1])),
+    new THREE.Vector3(...(n.scale || [1, 1, 1])),
+  );
+  const worldM = (i) => {
+    let m = localM(nodes[i]), p = parent[i];
+    while (p !== undefined) { m = localM(nodes[p]).multiply(m); p = parent[p]; }
+    return m;
+  };
+  const lightDefs = (j.extensions && j.extensions.KHR_lights_punctual && j.extensions.KHR_lights_punctual.lights) || [];
+  const out = [];
+  nodes.forEach((n, i) => {
+    if (!n.extensions || !n.extensions.KHR_lights_punctual) return;
+    const m = worldM(i);
+    out.push({
+      pos: new THREE.Vector3().setFromMatrixPosition(m),
+      fwd: new THREE.Vector3(0, 0, -1).transformDirection(m),
+      def: lightDefs[n.extensions.KHR_lights_punctual.light] || {}, // the FILE's own light
+    });
+  });
+  return out;
+}
+
+let dome = null;
+const glbLights = [];   // the floodlights from dynamic_light.glb — file's own intensity/cone/aim
+const helpers = [];
+let bulbs = null;
+
+// The SAME files the app imports, so the demo matches the app exactly. Each model carries
+// the date it was last replaced; pass a per-model date override when one is re-replaced.
+const M = (name, date = "2026-10-24") => `/src/assets/models/${name}_${date}.glb`;
+
+async function boot() {
+  try {
+    // Load the EXACT models the app uses (src/assets/models), not demo copies, so the
+    // demo matches the real app: stadium, ground, 30-yd circle, wicket, pitch lines,
+    // white ball, night dome, and the dynamic floodlights.
+    log("loading stadium …");
+    const st = await load(M("stadium", "2026-10-26")); scene.add(st.scene);
+    log("loading ground …");
+    const gr = await load(M("ground")); scene.add(gr.scene);
+    log("loading 30-yard circle …");
+    const c30 = await load(M("ground_30_yards", "2026-10-26")); scene.add(c30.scene);
+    log("loading wicket …");
+    const wk = await load(M("wicket", "2026-10-26")); scene.add(wk.scene);
+    log("loading pitch line …");
+    const pl = await load(M("pitch_line", "2026-10-26"));
+    // The pitch-line GLB ships its crease/line meshes with a plain GREY material; the app's
+    // WhiteLine component recolours them to white semi-transparent lines. Do the same here
+    // so the demo shows clean white lines instead of grey slabs on the pitch.
+    pl.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+      });
+      o.renderOrder = 2;
+    });
+    scene.add(pl.scene);
+    log("loading white ball …");
+    const bl = await load(M("ball_white"));
+    // Size it to a real cricket ball (~0.072 m diameter), same idea as the app, then drop
+    // it on a good length so it's a visible sanity check.
+    {
+      const box = new THREE.Box3().setFromObject(bl.scene);
+      const size = box.getSize(new THREE.Vector3());
+      const s = 0.072 / (Math.max(size.x, size.y, size.z) || 1);
+      bl.scene.scale.setScalar(s);
+      bl.scene.position.set(0, 0.1, 5);
+    }
+    scene.add(bl.scene);
+    log("loading night dome …");
+    const bd = await load(M("dome_withoutblack", "2026-10-26")); dome = bd.scene; scene.add(dome);
+    // The dome ships with STANDARD (lit) materials, so the floodlights blast its inner
+    // surface white. A sky backdrop must be UNLIT — show its own texture at a fixed
+    // brightness, immune to scene lights. Convert every dome material to MeshBasicMaterial
+    // (keep the texture + transparency). This is the fix to port into the app's NightDome.
+    const toUnlit = (m) => new THREE.MeshBasicMaterial({
+      map: m.map || null,
+      color: 0xffffff,
+      // The sky sphere is single-sided with OUTWARD normals; from inside the dome its
+      // back faces get culled → invisible. Force DoubleSide so it always renders.
+      side: THREE.DoubleSide,
+      // Make it a solid opaque backdrop (the glb ships the sky at 0.73 alpha, which
+      // just dims it over the black background).
+      transparent: false,
+      opacity: 1,
+      depthWrite: true,
+      toneMapped: false, // show the sky texture as-authored, not tone-mapped down
+    });
+    dome.traverse((o) => {
+      if (!o.isMesh) return;
+      // Keep + unlit both the SKY "sphere" and the textured horizon "plan" plane (fills the
+      // far horizon so there's no black). Only hide an UNtextured mesh (the old dome's plan
+      // had no map → unlit-whited into a white band).
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (!mats.some((m) => m && m.map)) { o.visible = false; return; }
+      o.material = Array.isArray(o.material) ? o.material.map(toUnlit) : toUnlit(o.material);
+    });
+
+    // field centre (where floodlights aim) = centre of the stadium footprint, on ground
+    const centre = new THREE.Vector3();
+    new THREE.Box3().setFromObject(st.scene).getCenter(centre); centre.y = 0;
+
+    log("building floodlights from dynamic_light …");
+    const lamps = await readLampTransforms(M("dynamic_light"));
+    bulbs = new THREE.Group(); scene.add(bulbs);
+    lamps.forEach(({ pos, fwd, def }) => {
+      // The floodlight EXACTLY as authored in dynamic_light.glb: the file's own colour,
+      // intensity, cone angles and baked aim. (We only rebuild because three.js shares
+      // one cached light across all 10 nodes.)
+      const col = def.color ? new THREE.Color(def.color[0], def.color[1], def.color[2]) : new THREE.Color(0xffffff);
+      const outer = def.spot ? def.spot.outerConeAngle : 0.62;
+      const inner = def.spot ? def.spot.innerConeAngle : 0.22;
+      const G = new THREE.SpotLight(col, def.intensity || 0, def.range || 0, outer, 1 - inner / outer, 2);
+      G.userData.baseIntensity = def.intensity || 0; // remember the file's raw value
+      G.position.copy(pos);
+      G.target.position.copy(pos.clone().addScaledVector(fwd, 50)); // file's OWN baked aim
+      scene.add(G); scene.add(G.target);
+      glbLights.push(G);
+      helpers.push(new THREE.SpotLightHelper(G, 0xffdd66));
+
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 10), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
+      bulb.position.copy(pos); bulbs.add(bulb);
+    });
+    helpers.forEach((h) => scene.add(h));
+
+    const d0 = lamps[0]?.def || {};
+    log(
+      `ready ✓  floodlights: ${glbLights.length}\n` +
+      `intensity: ${d0.intensity ? Math.round(d0.intensity).toLocaleString() : "?"}\n` +
+      `range: ${d0.range ?? "∞ (none in file)"}\n` +
+      `(toggle Day/Night · tick light cones)`
+    );
+    applyFlood(); // apply the default intensity multiplier so the field isn't blown out
+    applyMode();
+  } catch (e) {
+    log("ERROR: " + (e?.message || e));
+    console.error(e);
+  }
+}
+
+// ---- Day / Night ------------------------------------------------------------
+let night = true;
+function applyMode() {
+  // Independent checkboxes let you isolate the cause: dome vs floodlights.
+  const wantDome = document.getElementById("domeChk").checked;
+  const wantFlood = document.getElementById("floodChk").checked;
+  if (night) {
+    scene.background = new THREE.Color(0x05070d);
+    scene.environmentIntensity = 0.1;    // a touch of ambient; the glb floodlights do the rest
+    sun.visible = false;
+    if (dome) dome.visible = wantDome;
+    glbLights.forEach((L) => { L.visible = wantFlood; });
+  } else {
+    scene.background = new THREE.Color(0x87b7e8);
+    scene.environmentIntensity = 1.0;    // full daylight
+    sun.visible = true;
+    if (dome) dome.visible = false;
+    glbLights.forEach((L) => { L.visible = false; });
+  }
+  if (bulbs) bulbs.visible = night && wantFlood;
+  const cones = document.getElementById("cones").checked && night && wantFlood;
+  helpers.forEach((h) => { h.visible = cones; if (cones) h.update(); });
+  document.getElementById("toggle").textContent = night ? "🌙 Night" : "☀️ Day";
+}
+document.getElementById("toggle").onclick = () => { night = !night; applyMode(); };
+document.getElementById("cones").onchange = applyMode;
+document.getElementById("domeChk").onchange = applyMode;
+document.getElementById("floodChk").onchange = applyMode;
+document.getElementById("exp").oninput = (e) => {
+  renderer.toneMappingExposure = parseFloat(e.target.value);
+};
+// Floodlight intensity multiplier (log slider): factor = 10^slider. The glb ships a raw
+// Blender value (~1e7) that blows the field out; this scales every lamp down so you can
+// find the value that looks right, then I bake that factor into the app's DynamicLights.
+function applyFlood() {
+  const factor = Math.pow(10, parseFloat(document.getElementById("flx").value));
+  document.getElementById("flxv").textContent = factor.toPrecision(2);
+  glbLights.forEach((L) => { L.intensity = (L.userData.baseIntensity || 0) * factor; });
+}
+document.getElementById("flx").oninput = applyFlood;
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => {
+  controls.update();
+  helpers.forEach((h) => { if (h.visible) h.update(); });
+  renderer.render(scene, camera);
+});
+boot();
+</script>
+</body>
+</html>

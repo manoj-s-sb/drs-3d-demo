@@ -1,0 +1,27 @@
+#!/bin/sh
+# Auto-append details of every commit to COMMIT_LOG.md (table view).
+# Records: short hash, date/time, author name, email, message, full hash.
+# Runs for whoever makes the commit (see setup note in COMMIT_LOG.md).
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+LOG_PATH="$REPO_ROOT/COMMIT_LOG.md"
+
+if [ ! -f "$LOG_PATH" ]; then
+  {
+    printf '# Commit Log\n\n'
+    printf '_Auto-generated record of every commit — hash, author, date/time, message._\n'
+    printf '_Maintained by the `.githooks/post-commit` hook. One-time setup per clone:_ `git config core.hooksPath .githooks`\n\n'
+    printf '| # | Date / Time | Author | Email | Message | Commit |\n'
+    printf '|---|-------------|--------|-------|---------|--------|\n'
+  } > "$LOG_PATH"
+fi
+
+SHORT=$(git log -1 --pretty=format:'%h')
+HASH=$(git log -1 --pretty=format:'%H')
+AUTHOR=$(git log -1 --pretty=format:'%an')
+EMAIL=$(git log -1 --pretty=format:'%ae')
+DATE=$(git log -1 --pretty=format:'%ad' --date=format:'%Y-%m-%d %H:%M:%S %z')
+# Escape pipe characters in the subject so they don't break the table.
+SUBJECT=$(git log -1 --pretty=format:'%s' | sed 's/|/\\|/g')
+
+printf '| %s | %s | %s | %s | %s | `%s` |\n' "$SHORT" "$DATE" "$AUTHOR" "$EMAIL" "$SUBJECT" "$HASH" >> "$LOG_PATH"

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebSocket Client</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f7f7f7;
+      }
+      #log {
+        background: white;
+        border: 1px solid #ccc;
+        padding: 10px;
+        height: 500px;
+        overflow-y: auto;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+      button,
+      input {
+        padding: 8px 12px;
+        margin: 5px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      input[type="number"] {
+        width: 80px;
+      }
+      .log-entry {
+        margin-bottom: 10px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+      }
+      .header {
+        font-weight: bold;
+        color: #333;
+      }
+      .timestamp {
+        font-weight: bold;
+        color: #333;
+      }
+      .delay {
+        color: #666;
+        font-size: 12px;
+      }
+      .json-data {
+        background: #f4f4f4;
+        padding: 5px;
+        border-radius: 3px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>WebSocket Client</h2>
+    <p>Status: <span id="status">Disconnected</span></p>
+
+    <label for="laneInput">Lane ID:</label>
+    <input type="number" id="laneInput" value="1" min="1" />
+    <button id="connectBtn">Connect</button>
+    <button id="disconnectBtn" disabled>Disconnect</button>
+    <button id="downloadBtn" disabled>Download Data</button>
+
+    <div id="log"></div>
+
+    <script>
+      let ws = null;
+      let receivedMessages = [];
+      let lastMessageTime = null;
+      let reconnectTimeout = null;
+
+      function formatTime(date) {
+        return date.toLocaleString("en-IN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          fractionalSecondDigits: 3,
+        });
+      }
+
+      function log(message, data) {
+        const logDiv = document.getElementById("log");
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+
+        const currentTime = new Date();
+        let delay = 0;
+        if (lastMessageTime) delay = currentTime - lastMessageTime;
+        lastMessageTime = currentTime;
+
+        const timestampStr = formatTime(currentTime);
+
+        const headerEl = document.createElement("div");
+        headerEl.className = "header";
+        let headerText = `${message} (Timestamp: ${timestampStr})`;
+        if (data && data.type) {
+          headerText += ` | Type: ${data.type}`;
+          if (data.subType) headerText += ` | SubType: ${data.subType}`;
+        }
+        headerEl.textContent = headerText;
+
+        const delayEl = document.createElement("div");
+        delayEl.className = "delay";
+        delayEl.textContent = `Delay since last message: ${delay} ms`;
+
+        entry.appendChild(headerEl);
+        entry.appendChild(delayEl);
+
+        if (data !== undefined) {
+          const dataEl = document.createElement("pre");
+          dataEl.className = "json-data";
+          dataEl.textContent = JSON.stringify(data, null, 2);
+          entry.appendChild(dataEl);
+        }
+
+        logDiv.appendChild(entry);
+        // Auto-scroll disabled
+        // logDiv.scrollTop = logDiv.scrollHeight;
+
+        receivedMessages.push({
+          timestamp: timestampStr,
+          delayMs: delay,
+          data: data !== undefined ? data : null,
+        });
+      }
+
+      function connectWebSocket() {
+        const laneIdInput = document.getElementById("laneInput");
+        const laneId = Number(laneIdInput.value) || 1;
+        const wsUrl = "ws://192.168.0.111:8080/ws";
+
+        ws = new WebSocket(wsUrl);
+        document.getElementById("status").textContent = "Connecting...";
+
+        ws.onopen = () => {
+          log("Connected to WebSocket server");
+          document.getElementById("status").textContent = "Connected";
+          document.getElementById("connectBtn").disabled = true;
+          document.getElementById("disconnectBtn").disabled = false;
+          document.getElementById("downloadBtn").disabled = false;
+          laneIdInput.disabled = true;
+
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+          }
+
+          const subscribeMsg = {
+            sender: `display-lane-${laneId}`,
+            laneId: laneId,
+            type: "CHANNEL",
+            subType: "SUBSCRIBE",
+            status: "INIT",
+            parameters: {},
+          };
+
+          ws.send(JSON.stringify(subscribeMsg));
+          log("Sent subscribe message", subscribeMsg);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            log("Received message", data);
+          } catch (e) {
+            log("Received non-JSON message", { raw: event.data });
+          }
+        };
+
+        ws.onerror = (error) => {
+          log("WebSocket error", { error });
+        };
+
+        ws.onclose = () => {
+          log("Disconnected from WebSocket server");
+          document.getElementById("status").textContent = "Disconnected";
+          document.getElementById("connectBtn").disabled = false;
+          document.getElementById("disconnectBtn").disabled = true;
+          document.getElementById("downloadBtn").disabled = true;
+          laneIdInput.disabled = false;
+          lastMessageTime = null;
+
+          // Auto-reconnect after 3 seconds
+          reconnectTimeout = setTimeout(() => {
+            log("Attempting to reconnect...");
+            connectWebSocket();
+          }, 3000);
+        };
+      }
+
+      function disconnectWebSocket() {
+        if (ws) {
+          ws.close();
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+          }
+        }
+      }
+
+      function downloadData() {
+        if (receivedMessages.length === 0) {
+          alert("No data received yet.");
+          return;
+        }
+
+        const now = new Date();
+        const fileName = `socket_message_data_${String(now.getDate()).padStart(2, "0")}_${String(now.getMonth() + 1).padStart(2, "0")}_${now.getFullYear()}.json`;
+
+        const blob = new Blob([JSON.stringify(receivedMessages, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      document
+        .getElementById("connectBtn")
+        .addEventListener("click", connectWebSocket);
+      document
+        .getElementById("disconnectBtn")
+        .addEventListener("click", disconnectWebSocket);
+      document
+        .getElementById("downloadBtn")
+        .addEventListener("click", downloadData);
+    </script>
+  </body>
+</html>

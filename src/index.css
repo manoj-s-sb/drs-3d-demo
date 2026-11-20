@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* Self-hosted DejaVu Sans (bold) for the DRS decision overlay — shipped locally in
+   public/fonts so nothing is fetched from a CDN at runtime (offline-safe). */
+@font-face {
+  font-family: "DejaVu Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/DejaVuSans-Bold.ttf") format("truetype");
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  margin: 0;
+}
+
+@keyframes imageRevealCinematic {
+  0% {
+    opacity: 0;
+    filter: blur(20px) brightness(0.3);
+    transform: scale(1.08);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(4px) brightness(1);
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px) brightness(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes subtleAurora {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-imageCinematic {
+  animation: imageRevealCinematic 1.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.animate-aurora {
+  background-size: 350% 350%;
+  animation: subtleAurora 6s ease-in-out infinite alternate;
+}

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DRS 3D — Data Provenance & Production Audit</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2330; --border:#2a3240;
+    --txt:#e6edf3; --muted:#9aa7b4; --accent:#4da3ff; --accent2:#7c5cff;
+    --green:#3fb950; --amber:#e3b341; --red:#f85149; --redbg:#2d1618; --greenbg:#132117; --amberbg:#2a2413;
+    --chip:#223042;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f7; --border:#d7dee6;
+      --txt:#1c2128; --muted:#5a6773; --accent:#0969da; --accent2:#6639d6;
+      --green:#1a7f37; --amber:#9a6700; --red:#cf222e; --redbg:#fff0f0; --greenbg:#eaf6ee; --amberbg:#fdf6e3; --chip:#eaeef3; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 20px 80px;}
+  h1{font-size:28px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:21px;margin:44px 0 12px;padding-top:14px;border-top:1px solid var(--border);letter-spacing:-.2px}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+  .sub{color:var(--muted);margin:0 0 18px}
+  code{background:var(--chip);padding:1px 6px;border-radius:5px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;}
+  .verdict{border-radius:14px;padding:22px 24px;margin:18px 0 8px;border:1px solid;}
+  .verdict.go{background:var(--amberbg);border-color:var(--amber)}
+  .verdict h2{border:0;margin:0 0 6px;padding:0;font-size:22px}
+  .badge{display:inline-block;font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase;padding:4px 11px;border-radius:999px;vertical-align:middle;margin-left:8px}
+  .badge.amber{background:var(--amber);color:#1a1200}
+  .badge.red{background:var(--red);color:#fff}
+  .badge.green{background:var(--green);color:#042b10}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin:16px 0}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+  .card .n{font-size:26px;font-weight:700}
+  .card .l{color:var(--muted);font-size:13px}
+  table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:13.5px;display:block;overflow-x:auto;white-space:nowrap}
+  @media(min-width:900px){table{display:table;white-space:normal}}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{background:var(--panel2);font-weight:600;position:sticky;top:0}
+  tbody tr:hover{background:var(--panel2)}
+  td.src{font-weight:600}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap}
+  .t-api{background:#15324a;color:#79c0ff} .t-traj{background:#1d3a1e;color:#7ee787}
+  .t-anal{background:#3a2a4d;color:#d2a8ff} .t-calib{background:#4a3a15;color:#e3b341}
+  .t-cfg{background:#3a3f46;color:#c9d1d9} .t-comp{background:#143a38;color:#76e3d8}
+  @media (prefers-color-scheme: light){
+    .t-api{background:#ddf0ff;color:#0a4b8c}.t-traj{background:#e2f6e2;color:#1a7f37}
+    .t-anal{background:#f0e6fb;color:#6639d6}.t-calib{background:#faf0d0;color:#8a5a00}
+    .t-cfg{background:#e7ebf0;color:#404a56}.t-comp{background:#d6f3ef;color:#0a6b61}
+  }
+  .yes{color:var(--green);font-weight:700}.no{color:var(--red);font-weight:700}
+  /* A deliberately-static value (fixed config). NOT a problem — styled neutral, not red. */
+  .fixed{color:var(--muted);font-weight:700;white-space:nowrap}
+  .fixed .hint{display:block;font-weight:600;font-size:11px;color:var(--muted);opacity:.8}
+  .finding{background:var(--panel);border:1px solid var(--border);border-left-width:4px;border-radius:10px;padding:14px 16px;margin:12px 0}
+  .finding.crit{border-left-color:var(--red)} .finding.high{border-left-color:var(--amber)}
+  .finding.med{border-left-color:var(--accent)} .finding.ok{border-left-color:var(--green)}
+  .finding .sev{font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+  .finding.crit .sev{color:var(--red)}.finding.high .sev{color:var(--amber)}
+  .finding.med .sev{color:var(--accent)}.finding.ok .sev{color:var(--green)}
+  .finding h4{margin:4px 0 6px;font-size:15.5px}
+  .finding p{margin:5px 0;color:var(--txt)}
+  .finding .fix{color:var(--muted);font-size:13px;margin-top:7px}
+  ul.clean{margin:6px 0;padding-left:20px}
+  ul.clean li{margin:4px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 18px}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:40px;border-top:1px solid var(--border);padding-top:14px}
+  .chk{list-style:none;padding-left:0;margin:10px 0}
+  .chk li{padding:8px 12px;margin:6px 0;border:1px solid var(--border);border-radius:9px;background:var(--panel)}
+  .chk .p{font-weight:700;font-size:11px;padding:2px 7px;border-radius:5px;margin-right:9px}
+  .chk .p1{background:var(--red);color:#fff}.chk .p2{background:var(--amber);color:#1a1200}.chk .p3{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>DRS 3D — Data Provenance &amp; Production-Readiness Audit</h1>
+  <p class="sub">Mission-mode focus · Generated 2026-10-27 · Covers all broadcast modules, DRS pipeline, tickers &amp; AR overlays · Based on a full static code audit (4 parallel deep-dives), build + lint, and a frame-by-frame review of the reported black-screen video.</p>
+
+  <!-- ============ VERDICT ============ -->
+  <div class="verdict go">
+    <h2>Final verdict: <span style="color:var(--amber)">CONDITIONAL GO</span> <span class="badge amber">2 items left</span></h2>
+    <p style="margin:8px 0 0">The architecture is <strong>solid and genuinely defensive</strong> — every per-ball fetch is guarded, missing balls are dropped not fatal, every renderer short-circuits on empty data, multi-machine split overs work, and <strong>mission mode is confirmed free of dummy data</strong>. The recent black-screen fix (Suspense split + warmed ball) is verified correct.</p>
+    <p style="margin:8px 0 0">Since the first audit, <strong>B2 (stump runs) is fixed, the WebSocket hub is now configurable, and B4 was verified not to be a real risk.</strong> <strong>2 blockers remain</strong> — B1 (add a React error boundary) and B3 (add HTTP timeouts) — both small and fixable in well under a day. Ship after those plus the pre-flight checks at the venue. Everything marked <span class="fixed" style="white-space:normal">No · by design</span> in the tables below is intentional fixed config (styling / layout / camera presets), <em>not</em> a defect.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="n" style="color:var(--green)">✓</div><div class="l">Black-screen fix verified (Suspense split + warmed KTX2 ball + first-load-only loader)</div></div>
+    <div class="card"><div class="n" style="color:var(--green)">✓</div><div class="l">No dummy data reaches mission mode (every path <code>isLocal()</code>-gated)</div></div>
+    <div class="card"><div class="n" style="color:var(--green)">7/7</div><div class="l">Edge scenarios handled without crash (missing ball, 7+ balls, empty data, API down, calibration missing)</div></div>
+    <div class="card"><div class="n" style="color:var(--amber)">2</div><div class="l">Blockers remaining (B1 error boundary, B3 HTTP timeouts) — B2 fixed, B4 verified not-an-issue, socket now configurable</div></div>
+  </div>
+
+  <!-- ============ UPDATE LOG ============ -->
+  <h2>Update log — fixes applied since the first audit <span class="badge green">2026-10-27</span></h2>
+  <div class="finding ok">
+    <span class="sev">🟢 Done</span>
+    <ul class="clean">
+      <li><strong>B2 (Stump map runs = 0) — FIXED.</strong> Root cause was two-layered: (1) <code>sendToBigScreen</code> never pushed the per-ball <code>bowling</code> analysis for stump shows (only bowling/pitch did), so the big screen had no <code>byBall</code>; (2) the stump components never read <code>byBall</code>. Added stump to the broadcast branch (<code>OperatorDashboard.jsx</code>), and merged <code>score.bowling.byBall</code> into the dots (<code>StumpMap.jsx</code>) and the figures (<code>StumpTicker.jsx</code>) — identical to the pitch map. Stump runs/colours/economy are now correct on air.</li>
+      <li><strong>Hardcoded DRS-hub WebSocket — FIXED.</strong> The <code>ws://192.168.0.100:8080/ws</code> address is no longer hardcoded. Added <code>socketIp</code>/<code>socketPort</code> to the data-source config with its own <strong>"WebSocket"</strong> step in the Connection modal (independent of the camera + score servers). <code>socketClient.js</code> now builds the URL live from the store and the socket reconnects immediately on change. Persisted to localStorage.</li>
+      <li><strong>B4 (sample data on air) — VERIFIED NOT AN ISSUE.</strong> The big screen renders the operator's resolved <em>absolute</em> URLs verbatim (no re-resolve), so in mission mode sample data cannot reach air through bowling/pitch/stump/single/DRS, and the big-screen tab inherits server mode from shared localStorage. The only theoretical residual is the Swing module (re-resolves via its own source) under a rare 3-condition combo — not a blocker. Full reasoning below.</li>
+      <li><strong>Connection page — VERIFIED.</strong> See the next section: every IP field carries the correct data, changes take effect, and settings persist across refresh.</li>
+    </ul>
+  </div>
+
+  <!-- ============ CONNECTION PAGE ============ -->
+  <h2>Connection page — IP configuration &amp; persistence (verified)</h2>
+  <p class="sub">All four server addresses on the Connection page were traced end-to-end: UI field → Redux action → where it's consumed. Every consumer reads the value <strong>live</strong> from the store, so a change takes effect without a rebuild, and every field is persisted to <code>localStorage</code> and rehydrated on refresh.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Modal step</th><th>Stored as</th><th>Consumed by (live read)</th><th>Change takes effect</th><th>Survives refresh</th></tr></thead>
+    <tbody>
+      <tr><td>Camera machine IP / port</td><td>2 · Camera machines</td><td><code>ds.ip</code> / <code>ds.port</code></td><td><code>getServerBase()</code> + <code>getCameraServers()</code> (primary <code>m1</code>) — reads <code>store.getState()</code> each call</td><td class="yes">Next fetch</td><td class="yes">Yes</td></tr>
+      <tr><td>Extra camera machines</td><td>2 · Camera machines</td><td><code>ds.extraServers[]</code></td><td><code>getCameraServers()</code> appends them → multi-machine resolution</td><td class="yes">Next fetch</td><td class="yes">Yes</td></tr>
+      <tr><td>Live score IP / port</td><td>3 · Live score server</td><td><code>ds.apiIp</code> / <code>ds.apiPort</code></td><td><code>apiBase()</code> (<code>endpoints.js</code>) — reads <code>store.getState()</code> per request</td><td class="yes">Next request</td><td class="yes">Yes</td></tr>
+      <tr><td>WebSocket IP / port</td><td>4 · WebSocket</td><td><code>ds.socketIp</code> / <code>ds.socketPort</code></td><td><code>socketUrl()</code> (<code>socketClient.js</code>) — reads <code>store.getState()</code> on every (re)connect</td><td class="yes">Reconnects immediately</td><td class="yes">Yes</td></tr>
+    </tbody>
+  </table>
+  <div class="finding ok">
+    <span class="sev">🟢 Persistence — how it sticks</span>
+    <ul class="clean">
+      <li><strong>Auto-save on every change:</strong> the operator tab subscribes to the store and writes the <em>whole</em> <code>dataSource</code> slice to <code>localStorage("dataSourceConfig")</code> whenever it changes (<code>store.js</code>). So each edit sticks even without pressing Save.</li>
+      <li><strong>"Save &amp; connect" button:</strong> also writes the whole slice (<code>{...ds}</code>) — nothing is dropped, including the new WebSocket fields.</li>
+      <li><strong>On refresh:</strong> <code>loadPersisted()</code> rehydrates <code>{...DEFAULTS, ...saved}</code>, so every saved IP/port comes back. Only <code>basePath</code> is intentionally forced from code (no UI field for it).</li>
+      <li><strong>Big-screen tab:</strong> reads <code>localStorage</code> on load but does <em>not</em> write it (operator-tab-only), so it can never clobber the operator's config with a stale copy. It uses the operator's absolute show URLs anyway.</li>
+    </ul>
+  </div>
+  <p class="sub"><strong>Verdict:</strong> the Connection page is correct — each IP drives exactly the data it names, changes apply live, and updates persist across refresh.</p>
+
+  <!-- ============ BLOCKERS ============ -->
+  <h2>Must-fix before production <span class="badge amber">2 remaining</span></h2>
+  <p class="sub">B2 is fixed (see update log) and B4 was downgraded. The remaining blockers are <strong>B1</strong> and <strong>B3</strong>.</p>
+
+  <div class="finding crit">
+    <span class="sev">🔴 Critical · B1</span>
+    <h4>No React error boundary anywhere → one bad ball field = full white screen</h4>
+    <p>The only error boundary in the codebase wraps the HDRI lighting (<code>FixedScene.jsx</code> <code>EnvBoundary</code>). If any live per-ball JSON has a shape that slips past the null-guards and <em>throws during render</em> (a NaN into <code>CatmullRomCurve3</code>, a malformed <code>balls[0]</code>, an unexpected decisions structure), React unmounts the <strong>entire root</strong> → blank white big screen, recoverable only by reload. Suspense boundaries do <em>not</em> catch render errors.</p>
+    <p class="fix"><strong>Fix:</strong> wrap <code>&lt;ThreeScene&gt;</code>, the Canvas module subtree, and the ticker/overlay group in error boundaries that render <code>null</code> (keep the stadium / last-good frame) and log. A single bad ball then degrades one module instead of killing the broadcast.</p>
+  </div>
+
+  <div class="finding ok">
+    <span class="sev">🟢 B2 — FIXED (was Critical · wrong data on air)</span>
+    <h4>Stump Map run numbers now come from the Score API, like the pitch map</h4>
+    <p><strong>The <code>runs: 0</code> hardcode is gone.</strong> The bug had two layers, both fixed:</p>
+    <ul class="clean">
+      <li><strong>Operator never broadcast the per-ball score for stump shows.</strong> <code>sendToBigScreen</code> pushed the <code>bowling</code> analysis (which carries <code>byBall</code>) only for bowling/pitch modes, so the big screen had no runs to show. → Added <code>stump</code> to that branch (<code>OperatorDashboard.jsx</code>), so the over's per-ball runs/wickets are now loaded and sent.</li>
+      <li><strong>Stump components never read <code>byBall</code>.</strong> → <code>StumpMap.jsx</code> now merges <code>score.bowling.byBall</code> into each dot's runs/wicket (dot colour + number), and <code>StumpTicker.jsx</code>'s <code>computeFigures</code> reads it too (Runs / Economy / Maidens). Both fall back to the point's own values if the API is down — identical to <code>MultiPitchMap.jsx</code>.</li>
+    </ul>
+    <p><strong>Result on air:</strong> non-wicket dots show the real run number and correct colour (not grey "0"); the stump ticker shows real Runs / Economy / Maidens (not 0 / 0.00 / all-maidens). Wickets unchanged. <code>loadStump</code> still sets a <code>0</code> default only as the pre-merge fallback value.</p>
+  </div>
+
+  <div class="finding high">
+    <span class="sev">🟠 High · B3</span>
+    <h4>No HTTP timeout anywhere → an unreachable camera machine freezes Start / Send / live-poll</h4>
+    <p>None of the <code>axios.get/head</code> calls (dataSource + score API) set a <code>timeout</code>; Axios default is infinite. If a configured machine is <em>powered off / unplugged</em> (black-holed IP, no TCP RST), each request hangs on the OS connect timeout (tens of seconds). The 3-second live-poll piles up hanging sockets; Start / Send-to-Big-Screen appears frozen mid-over. (A machine that actively refuses is fine — instant reset.)</p>
+    <p class="fix"><strong>Fix:</strong> add an explicit <code>timeout</code> (~1500&nbsp;ms) to every dataSource and score-API axios call, or set <code>axios.defaults.timeout</code>.</p>
+  </div>
+
+  <div class="finding ok">
+    <span class="sev">🟢 B4 — NOT AN ISSUE (was flagged High; verified false)</span>
+    <h4>Sample data cannot reach air when the operator is connected to the machine</h4>
+    <p>Re-verified against the code. The big screen does <strong>not</strong> fetch cricket data using its own <code>source</code> setting — it plays the <strong>absolute URLs the operator resolved</strong>:</p>
+    <ul class="clean">
+      <li><strong>over / pitch / stump / single / DRS</strong> → all use <code>cmd.urls</code> / <code>cmd.url</code> / <code>cmd.folderUrl</code> (<code>showCommands.js:397-475</code>). In mission mode these are <code>http://&lt;machine-ip&gt;/…</code>, so the big screen fetches from the machine regardless of its own setting.</li>
+      <li><strong>score / ticker</strong> → pushed to the big screen over cross-tab (<code>sendBowlingAnalysis</code>/<code>sendSnapshot</code>); the big screen never fetches score itself.</li>
+      <li>The big-screen tab also <strong>shares localStorage</strong> with the operator (same origin), so once the operator sets server mode the big-screen tab inherits it via <code>loadPersisted()</code>. An idle big screen fetches no cricket data at all.</li>
+    </ul>
+    <p><strong>Only theoretical leak — Swing, and only if ALL hold at once:</strong> (1) the big screen runs on a <em>different</em> browser profile/machine from the operator (doesn't share its localStorage), (2) that profile was <em>never</em> set to server mode, and (3) a Swing show is played. Swing is the one module that re-resolves via its own source (<code>SwingAnalysis.jsx:97</code> → <code>loadTrajectory</code>); every other module is immune.</p>
+    <p class="fix"><strong>Status:</strong> not a blocker. Optional hardening to close even the Swing corner: send Swing as a resolved absolute URL (like the other modules) instead of <code>{innings, over, ball}</code> (~10 lines).</p>
+  </div>
+
+  <!-- ============ PRE-FLIGHT ============ -->
+  <h2>Pre-flight checks to verify at the venue (not code bugs — config)</h2>
+  <ul class="chk">
+    <li><span class="p p3">SET</span><strong>DRS-hub WebSocket address</strong> — now editable in the Connection modal (Step 4 · WebSocket). Set the venue hub's IP/port there (builds <code>ws://&lt;ip&gt;:&lt;port&gt;/ws</code>); it reconnects immediately and persists. Just confirm it points at the real hub before air.</li>
+    <li><span class="p p2">VERIFY</span><strong>Six-highlights distance/height come from <code>ball_analytics.json</code></strong> (<code>bat_hit.distance_travelled_cm</code> / <code>max_height_cm</code>), not frontend physics. If that file is missing for a ball, distance/height silently fall back to the 3D arc apex — height is ~OK but <strong>distance becomes nonsense</strong>. Confirm every highlight ball ships <code>ball_analytics.json</code> with a <code>bat_hit</code> block.</li>
+    <li><span class="p p2">VERIFY</span><strong>Calibration exists for every camera index you will use.</strong> <code>public/camera_config/</code> currently has cams <strong>1, 2, 3</strong> only (<code>N_camera_calibration.yaml</code> + <code>P_N.npy</code>). <code>DEFAULT_REPLAY_CAMERA = "3"</code> must have calibration. Adding <code>4_/5_/6_</code> + <code>P_4/5/6</code> auto-works (index-driven, no code change). A selected index without a matching file → AR overlay misaligns (handled gracefully but visibly).</li>
+    <li><span class="p p3">VERIFY</span><strong><code>VIDEO_FPS</code> default is 120</strong> (<code>drsConfig.js:17</code>). It must match each DRS mp4's real frame rate, or the pitch/impact freeze frames land on the wrong moment.</li>
+  </ul>
+
+  <!-- ============ NICE TO HAVE ============ -->
+  <h2>Lower-priority (safe to ship, worth a follow-up)</h2>
+  <div class="finding med">
+    <span class="sev">🔵 Medium</span>
+    <h4>Silent failures the operator can't see</h4>
+    <ul class="clean">
+      <li><strong>All balls 404 (machine offline for the over):</strong> no crash, no black — but nothing plays and no reason is shown. The <code>missing</code> count is computed yet only <code>console.warn</code>-ed. Surface it in the operator UI.</li>
+      <li><strong>DRS calibration/asset load failure:</strong> DRS aborts cleanly (<code>endDrs()</code>) but silently — operator sees nothing happen. Add a toast.</li>
+      <li><strong>Cued DRS video 404:</strong> the paused/cued branch attaches only <code>loadeddata</code>, not <code>error</code> — a 404 on a cued clip shows black on the cue until Play. The normal play path <em>does</em> handle errors + 30s safety fallback.</li>
+      <li><strong>Big-screen command handlers</strong> (<code>crossTabSync.js</code> <code>cueShow/playShow/executeCommand</code>) aren't wrapped in try/catch; a malformed command could throw in the event handler.</li>
+    </ul>
+  </div>
+  <div class="finding med">
+    <span class="sev">🔵 Medium</span>
+    <h4>Length-zone definitions are inconsistent (cosmetic classification drift)</h4>
+    <p>Three different length-band boundary sets exist: <code>LENGTH_ZONES</code> (1/3/6/8&nbsp;m, used for the bowling length label), <code>PITCH_ZONE_MID_Z</code> (pitch-map chip anchors), and <code>PitchMapOverlay ZONES</code> (2/6/8, used for the LENGTH DISTRIBUTION %). The same ball can be bucketed differently by each. Unify if the percentages must match the painted bands.</p>
+  </div>
+  <div class="finding med">
+    <span class="sev">🔵 Medium</span>
+    <h4>Pitch-map dot colours vs figures ticker can disagree</h4>
+    <p>Pitch-map <em>dot colours</em> use the API-merged outcome, but the <em>figures ticker</em> (Runs/Economy) computes from the raw <code>p.runs</code> on the point (trajectory JSON). If API and JSON runs differ, the coloured dots and the numbers tell different stories.</p>
+  </div>
+
+  <!-- ============ WHAT WORKS ============ -->
+  <h2>What's already solid (verified)</h2>
+  <div class="finding ok">
+    <span class="sev">🟢 Confirmed working</span>
+    <ul class="clean">
+      <li><strong>Black-screen on module switch — FIXED &amp; verified.</strong> The frame-by-frame video review proved the black was drei's loader over a suspended scene (not a camera bug). The fix (separate Suspense boundary for the stadium vs modules, a hidden warmed KTX2 ball in <code>FixedScene</code>, and <code>InitialLoader</code> gated to first load only) is correct and complete.</li>
+      <li><strong>No dummy data in mission mode.</strong> Every cricket-data path (lists, trajectories, video, score) is gated on <code>dataSource.source === "server"</code>. The two sample entry points (the "T" test replay, the local pitch-map builder) are hard-gated to local mode.</li>
+      <li><strong>Multi-machine split overs work.</strong> Ball lists are unioned across all machines (first-machine-wins); each ball resolves to whichever machine has it via a HEAD probe with HTML-rejection; the operator's preferred-server picker is tried first but still falls back.</li>
+      <li><strong>Calibration is shared + index-driven</strong> from <code>public/camera_config/</code> for both modes; adding higher-index files auto-extends.</li>
+      <li><strong>Live auto-refresh</strong> (3s) is correctly mission-only, compares ball/over lists, and refreshes the pickers without a reload while preserving the operator's selection.</li>
+      <li><strong>Edge cases:</strong> one ball 404 → others still play; empty points → clean no-render; 7+ balls (wides/no-balls) → handled (colours just wrap mod-6); score API down → tickers fall back to "BOWLER", colours fall back to trajectory JSON.</li>
+      <li><strong>Build + lint:</strong> production build passes; no runtime-dangerous lint errors in app code (all <code>no-undef</code>/<code>no-redeclare</code> are in the vendored <code>basis_transcoder.js</code>).</li>
+    </ul>
+  </div>
+
+  <!-- ============ DATA PROVENANCE ============ -->
+  <h2>Data provenance — where every number comes from</h2>
+  <p class="sub">The app has <strong>five live data sources</strong> plus hardcoded presentation config. Nothing shown on air is invented on the frontend except geometry derived from the real trajectory, and a few count-up animations. Coordinate convention: batter stumps at origin, <code>+Z</code> toward bowler, all distances in metres after a single <code>×0.01</code> cm→m scale.</p>
+
+  <div class="legend">
+    <span class="tag t-api">API — Score API (/api/snapshot, ballLog)</span>
+    <span class="tag t-traj">TRAJ — per-ball trajectory_data.json</span>
+    <span class="tag t-anal">ANALYTICS — ball_analytics.json</span>
+    <span class="tag t-calib">CALIB — public/camera_config</span>
+    <span class="tag t-comp">COMPUTED — derived on frontend</span>
+    <span class="tag t-cfg">CFG — hardcoded config/constant</span>
+  </div>
+
+  <h3>Module 1 — Bowling Analysis</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Trajectory tubes (red pre-impact / blue post-impact)</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>Points <code>[frame,x,y,z]×0.01</code>, split at <code>impactFrame</code>, CatmullRom tube</td></tr>
+      <tr><td>Bounce / impact points</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>From <code>pitchingFrame</code> / <code>impactFrame</code> indices</td></tr>
+      <tr><td>Ball speed (ticker)</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>speed.beforePitch</code> → km/h; "--" if absent. <em>Not in the API.</em></td></tr>
+      <tr><td>Bowler name (header)</td><td class="src"><span class="tag t-api">API</span></td><td class="yes">Yes</td><td><code>score.bowler.name</code>; fallback literal "BOWLER"</td></tr>
+      <tr><td>Over number, ball number</td><td class="src"><span class="tag t-api">API</span> / <span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>Over from API selection; ball# from trajectory <code>ball.ball</code></td></tr>
+      <tr><td>Ball / chip colour</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td><code>BALL_COLORS[idx % 6]</code> — positional (ball 1-6), <em>not</em> outcome</td></tr>
+      <tr><td>Camera poses, FOVs, timings, tube radius, ball size</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td><code>bowlingAnalysisAnimations.js</code>. (Camera <em>aim</em> targets are derived from the ball bounding box.)</td></tr>
+    </tbody>
+  </table>
+  <div class="finding ok">
+    <span class="sev">🟢 By design — not an issue</span>
+    <ul class="clean">
+      <li><strong>The 6 ball/chip colours are fixed on purpose.</strong> Ball 1 = red, 2 = blue, 3 = purple, 4 = green, 5 = brown, 6 = gold — every over, always. In bowling analysis the colour's job is just to tell the 6 trajectories apart, so it's positional, <em>not</em> outcome-based. (Outcome colours live in the pitch/stump maps.) Intended behaviour.</li>
+      <li><strong>The camera is fixed in <em>style</em>, adaptive in <em>aim</em> — also by design.</strong> The angles, heights, lens (FOV), zoom push-in and timings are fixed presets so the look stays consistent and on-brand. But where the camera points/anchors is computed from where this over's balls actually are (their bounding box centre, bounce, release, stumps), so every over is well-framed regardless of line/length. Not a bug — this is how it was built.</li>
+    </ul>
+  </div>
+
+  <h3>Module 2 — Pitch Map</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Dot position (where ball pitched)</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>pitchingCoordinates[0]×0.01</code> (standalone) or <code>positions[pitchIndex]</code> (combined)</td></tr>
+      <tr><td>Runs / wicket per dot</td><td class="src"><span class="tag t-api">API</span> → <span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>byBall[ballNo]</code> merged; falls back to trajectory <code>ball.runs</code> / <code>wicketsFrame</code></td></tr>
+      <tr><td>Dot colour (by-ball mode)</td><td class="src"><span class="tag t-comp">COMPUTED</span></td><td class="yes">Yes</td><td><code>ballColorHex(runs,isWicket)</code>: wicket=yellow, 6=red, 4=blue, 1-3=green, dot=grey</td></tr>
+      <tr><td>Zone band colours + FULL/GOOD/SHORT labels</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td><code>PITCHMAP_CONFIG</code> — painted on GLB meshes by name</td></tr>
+      <tr><td>Length distribution % chips</td><td class="src"><span class="tag t-comp">COMPUTED</span></td><td class="yes">Yes</td><td>Count of dots per zone / total; <em>uses a third zone-boundary set (see Medium findings)</em></td></tr>
+      <tr><td>Figures ticker (Overs/Maidens/Runs/Wkts/Economy)</td><td class="src"><span class="tag t-comp">COMPUTED</span> from <span class="tag t-api">API</span></td><td class="yes">Yes</td><td><code>figuresFromPoints</code>: runs=Σ, wickets=Σ, economy=runs/overs, maidens=0-run overs</td></tr>
+      <tr><td>Camera poses / dot sizes</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td><code>pitchMapAnimations.js</code> (separate PiP set)</td></tr>
+    </tbody>
+  </table>
+  <div class="finding ok">
+    <span class="sev">🟢 By design — not an issue</span>
+    <p>The pitch map has <strong>two kinds of colour</strong>, and only one is (correctly) dynamic:</p>
+    <table>
+      <thead><tr><th>Colour</th><th>What</th><th>Fixed / dynamic</th></tr></thead>
+      <tbody>
+        <tr><td>Zone BAND colours</td><td>Yorker = yellow, Full = green, Good = red, Short = purple</td><td><strong>Fixed — by design.</strong> These are the painted length zones (the pitch's "map"). They describe <em>where</em> each length is, so they must stay constant. No need to be dynamic.</td></tr>
+        <tr><td>DOT colours</td><td>dot = grey, 1–3 = green, four = blue, six = red, wicket = yellow</td><td class="yes">Dynamic — the actual deliveries, coloured by outcome (see rows above).</td></tr>
+      </tbody>
+    </table>
+    <ul class="clean">
+      <li><strong>Zone bands + FULL/GOOD/SHORT labels are fixed on purpose.</strong> The band colours and their text (<code>PITCHMAP_CONFIG</code>, applied to the <code>pitch_map.glb</code> meshes by name) are the broadcast's fixed pitch layout — constant by design, not driven by match data. Correct as-is; they do <em>not</em> need to be dynamic.</li>
+      <li><strong>Camera poses and dot sizes are fixed presets — also by design.</strong> The Hawk-Eye/top framing and the dot diameters live in <code>pitchMapAnimations.js</code> (with a separate set for the PiP window) so the look stays consistent. Because the pitch is always at the same spot in the scene, a fixed camera always frames it — no need to adapt (unlike Bowling Analysis). The <em>dots</em> (positions, run numbers, outcome colours) remain fully dynamic. Not a bug.</li>
+    </ul>
+  </div>
+
+  <h3>Module 3 — Stump Map <span class="badge green">B2 fixed</span></h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Ball crossing X/Y at stumps (beehive position)</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>Linear interp of the trajectory segment straddling the stump plane</td></tr>
+      <tr><td>Wicket flag</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>ballMeta.wicketsFrame &gt; 0</code> — correct</td></tr>
+      <tr><td>Runs per dot</td><td class="src"><span class="tag t-api">API</span> → <span class="tag t-traj">TRAJ</span></td><td class="yes">Yes ✓</td><td><strong>Fixed (B2):</strong> merged from <code>score.bowling.byBall[ballNo]</code> in <code>StumpMap.jsx</code>, fallback to the point's value. Dot colour + number now correct.</td></tr>
+      <tr><td>Ticker figures (Runs/Economy/Maidens)</td><td class="src"><span class="tag t-comp">COMPUTED</span> from <span class="tag t-api">API</span></td><td class="yes">Yes ✓</td><td><strong>Fixed (B2):</strong> <code>computeFigures</code> reads <code>byBall</code> runs/wickets → real Runs / Economy / Maidens.</td></tr>
+      <tr><td>Bowler name, over/ball</td><td class="src"><span class="tag t-api">API</span> / URL path</td><td class="yes">Yes</td><td>Bowler from API; over/ball parsed from URL (JSON's own over deemed unreliable)</td></tr>
+      <tr><td>Camera (beehive telephoto) / ball sizes</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td>6° fov (12° PiP), fixed pose</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Module 4 — Swing Analysis</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Actual path (red pre-pitch / blue post-pitch)</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>trajectory×0.01</code>, split at pitch index</td></tr>
+      <tr><td>Intended / "no-deviation" reference path</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><code>noDeviation[]</code>; fallback = straight line pitch→impact</td></tr>
+      <tr><td>Deviation / Turn angle (°) in legend</td><td class="src"><span class="tag t-anal">ANALYTICS</span></td><td class="yes">Yes</td><td><code>turn_deg</code> from <code>ball_analytics.json</code>; "—" if missing</td></tr>
+      <tr><td>Camera (behind bowler) + key 1-4 review angles</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td>Fixed, pitch-anchored; batter hand flips arcs (from DRS operator input)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>DRS pipeline</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Video clip + start/pitch/impact frames</td><td class="src"><span class="tag t-traj">MP4</span> + <span class="tag t-traj">ball_coords.json</span></td><td class="yes">Yes</td><td>Trimmed clip preferred; frames→time via <code>VIDEO_FPS</code> (120). Stops at impact+N</td></tr>
+      <tr><td>Virtual (AR) camera pose — aligns 3D to video</td><td class="src"><span class="tag t-calib">CALIB</span> + <span class="tag t-traj">ball_coords</span></td><td class="yes">Yes</td><td><code>P_N.npy</code> + <code>N_camera_calibration.yaml</code> decomposed to C,R,K; per-frame shake from coords</td></tr>
+      <tr><td>3D ball + red tube + "wickets-hitting" blue tube</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td><strong>Blue tube is the post-impact trajectory data, not a separate stump projection.</strong> No frontend would-hit-stumps calc.</td></tr>
+      <tr><td>Pitching / impact AR markers</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>GLB marker balls at <code>pitchingCoordinates</code> / impact point; reveal timed to the video frame</td></tr>
+      <tr><td>LBW decision matrix (Pitching/Impact/Wickets/Final…)</td><td class="src"><span class="tag t-traj">TRAJ</span> + operator</td><td class="yes">Yes</td><td>Row picked by <code>softSignal+originalDecision+isRightHanded</code> from <code>ballMeta.decisions</code>. <strong>Frontend does not validate it.</strong></td></tr>
+      <tr><td>Which panels / trajectory mode / review camera</td><td class="src"><span class="tag t-cfg">CFG JSON</span></td><td class="yes">Yes</td><td><code>public/config/drs-review-rules.json</code> (built-in fallback if fetch fails)</td></tr>
+      <tr><td>No-ball ball-height at crease + verdict</td><td class="src"><span class="tag t-traj">TRAJ</span> + <span class="tag t-comp">COMPUTED</span></td><td class="yes">Yes</td><td>First point where z≤120cm → its height; vs operator-entered body lines</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Six Highlights</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Distance (m)</strong></td><td class="src"><span class="tag t-anal">ANALYTICS</span></td><td class="yes">Yes</td><td><code>bat_hit.distance_travelled_cm / 100</code>, count-up animated. <strong>Fallback → 3D arc height if file missing (bad proxy)</strong></td></tr>
+      <tr><td><strong>Max height (m)</strong></td><td class="src"><span class="tag t-anal">ANALYTICS</span></td><td class="yes">Yes</td><td><code>bat_hit.max_height_cm / 100</code>; fallback → 3D apex height</td></tr>
+      <tr><td>Launch angle (°) / exit speed from bat (km/h)</td><td class="src"><span class="tag t-anal">ANALYTICS</span></td><td class="yes">Yes</td><td><code>hit_angle_deg</code> / <code>hit_speed_kmph</code>; fallback 0</td></tr>
+      <tr><td>Distance &amp; height measurement lines (where they sit)</td><td class="src"><span class="tag t-comp">COMPUTED</span> from <span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>Projected from the real 3D trajectory (launch→landing, apex→ground). The <em>line</em> is real geometry; the <em>number</em> on it is from analytics.</td></tr>
+      <tr><td>Camera framing (side / main, keys 1-2)</td><td class="src"><span class="tag t-comp">COMPUTED</span> + <span class="tag t-cfg">CFG</span></td><td class="yes">Yes</td><td>From flight geometry + hardcoded framing constants</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Tickers &amp; AR overlay "stickers"</h3>
+  <table>
+    <thead><tr><th>Datum</th><th>Source</th><th>Dynamic?</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>All ticker bowler names</td><td class="src"><span class="tag t-api">API</span></td><td class="yes">Yes</td><td><code>score.bowling.bowler</code> → name → prevOverBowler → bowlers[]; fallback "BOWLER"</td></tr>
+      <tr><td>Ticker runs / wickets / economy</td><td class="src"><span class="tag t-api">API</span> via <span class="tag t-comp">COMPUTED</span></td><td class="yes">Yes</td><td>From <code>/api/balls</code> per-point (except Stump — see B2). Runs = leading digit of ballLog; wicket = "W" not "WD"</td></tr>
+      <tr><td>Ball trajectory tube + markers over the video</td><td class="src"><span class="tag t-traj">TRAJ</span></td><td class="yes">Yes</td><td>Same 3D objects, camera matched to the mp4 via calibration</td></tr>
+      <tr><td>LBW centre strip over the video</td><td class="src"><span class="tag t-cfg">CFG</span> (mesh) + <span class="tag t-calib">CALIB</span> (placement)</td><td class="yes">Placement: Yes</td><td>The strip <em>mesh</em> is fixed (<code>pitch_line_2026-10-27.glb</code>, pitch centre), but <strong>where it appears on the video is dynamic</strong> — projected through the virtual camera built from <code>public/camera_config/</code> (<code>P_&lt;cam&gt;.npy</code> + <code>&lt;cam&gt;_camera_calibration.yaml</code>) plus the per-frame shake transforms in <code>ball_coords.json</code>. Change camera → re-projected to that angle. Opacity varies by phase.</td></tr>
+      <tr><td>Decision panels over the video</td><td class="src"><span class="tag t-traj">TRAJ</span> + operator</td><td class="yes">Yes</td><td><code>ballMeta.decisions</code> rows; which panels + reveal timing from the review plan</td></tr>
+      <tr><td>Ticker layout / fonts / colours</td><td class="src"><span class="tag t-cfg">CFG</span></td><td class="fixed">No <span class="hint">by design</span></td><td><code>tickerStyle.js</code>, container-query sized to a 1920 reference</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ MISSION VS SAMPLE ============ -->
+  <h2>Mission vs Sample mode — how it connects</h2>
+  <p class="sub">One switch controls everything: Redux <code>dataSource.source</code> (<code>"local"</code> = Sample, <code>"server"</code> = Mission), persisted to localStorage, set in the Server wizard. <code>isLocal()</code> gates every branch. The per-tab role (<code>?broadcast=1</code> / <code>?dashboard=1</code>) does <em>not</em> affect data sourcing.</p>
+  <table>
+    <thead><tr><th>Data type</th><th>Sample (local)</th><th>Mission (server)</th></tr></thead>
+    <tbody>
+      <tr><td>Base URL</td><td>literal <code>/data</code></td><td><code>http://ip:port</code> + basePath + match</td></tr>
+      <tr><td>Over/ball lists</td><td>single <code>/data</code> listing</td><td>union across all machines (first-machine-wins)</td></tr>
+      <tr><td>Trajectory JSON</td><td>single bundled path</td><td>HEAD-probe each machine, first hit, HTML-rejected</td></tr>
+      <tr><td>Score / ticker</td><td>built from local trajectory JSON</td><td>Score API only (<code>http://apiIp:apiPort/api/…</code>)</td></tr>
+      <tr><td>DRS video</td><td>local delivery folder</td><td>per-machine folder of the clicked camera</td></tr>
+      <tr><td>Calibration</td><td colspan="2" style="text-align:center"><code>public/camera_config/</code> — <strong>identical in both modes</strong>, index-driven</td></tr>
+      <tr><td>Live auto-refresh (3s)</td><td>disabled</td><td>active</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    Method: full static code audit across four parallel deep-dives (broadcast modules, DRS/six/tickers/overlay, mission-mode breakage, connection + dummy-data), cross-checked against a production build, ESLint, and a frame-by-frame review of the reported black-screen recording. Line references are accurate as of branch <code>fix/drs-and-videos</code> on 2026-10-27. This audit reads code paths; it does not substitute for a live dry-run against the real camera machines at the venue — do that end-to-end at least once before air.
+  </div>
+
+</div>
+</body>
+</html>
