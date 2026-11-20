@@ -139,7 +139,24 @@ export async function loadReleaseSpeed(trajectoryUrl) {
 
 async function listDir(url) {
   const res = await axios.get(cacheBust(url), { validateStatus: () => true });
-  return parseDirectories(res.data);
+  const dirs = parseDirectories(res.data);
+  if (dirs.length) return dirs;
+  // Fallback for static hosting with no directory-listing server (Vercel, S3,
+  // nginx without autoindex): a build-time `index.json` in each folder carries
+  // the same [{name,type}] shape the dev/nginx autoindex returns. `url` always
+  // ends with "/", so the manifest sits right beside it.
+  // See scripts/gen-data-manifest.mjs (run from `npm run build`).
+  try {
+    const idx = await axios.get(cacheBust(url + "index.json"), {
+      validateStatus: () => true,
+    });
+    if (idx.status >= 200 && idx.status < 300) {
+      return parseDirectories(idx.data);
+    }
+  } catch {
+    /* no manifest — fall through to empty */
+  }
+  return [];
 }
 
 // Natural numeric sort for folder names like "1","2","10".
