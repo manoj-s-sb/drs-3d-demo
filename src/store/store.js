@@ -1,6 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import animationReducer from "./slices/animationSlice";
-import screenTextReducer from "./slices/screentextSlice";
+import screenTextReducer from "./slices/screenTextSlice";
 import sessionReducer from "./slices/sessionSlice";
 import cameraReducer from "./slices/cameraSlice";
 import drsReducer from "./slices/drsSlice";
